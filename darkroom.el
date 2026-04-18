@@ -110,6 +110,28 @@ symmetical margins."
 (defvar darkroom--guess-margins-statistics-cache nil
   "Cache used by `darkroom-guess-margins'.")
 
+(defun darkroom--window-scaled-char-width (window)
+  "Return the character width in WINDOW, respecting scaling."
+  ;; Sometimes the area queried for pixel size returns (0 . 0),
+  ;; e.g. when it has a display property.  Newlines also yield width
+  ;; of 0.  We must therefore search for a character not returning
+  ;; zero width.
+  (with-current-buffer (window-buffer window)
+    (let ((width 0))
+      (cl-flet ((current-pixel-width ()
+                  (if (not (eobp))
+                      (car (window-text-pixel-size window (point) (1+ (point))))
+                    0)))
+        (save-excursion
+          (goto-char (point-min))
+          (setq width (current-pixel-width))
+          (while (and (= width 0) (not (eobp)))
+            (goto-char (text-property-any (1+ (point)) (point-max) 'display nil))
+            (setq width (current-pixel-width)))
+          (if (/= width 0)
+              width
+            (frame-char-width (window-frame window))))))))
+
 (defun darkroom--window-width (&optional window)
   "Calculate width of WINDOW in columns, considering text scaling.
 WINDOW defaults to the currently selected window. The function
@@ -121,9 +143,7 @@ width in pixels of a single character."
   (when (= (point-min) (point-max))
     (error "Cannot calculate the width of a single character"))
   (let* ((window (or window (selected-window)))
-         (scaled-char-width (car (window-text-pixel-size
-                                  window
-                                  (point-min) (1+ (point-min)))))
+         (scaled-char-width (darkroom--window-scaled-char-width window))
          (char-width (frame-char-width))
          (margins (window-margins window)))
     (cons (truncate
